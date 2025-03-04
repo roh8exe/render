@@ -1,7 +1,5 @@
 from flask import Flask, request, jsonify
 from flask_cors import CORS
-import torch
-from transformers import AutoTokenizer, AutoModel, pipeline
 import os
 import requests
 
@@ -14,27 +12,31 @@ HF_API_TOKEN = os.getenv("HF_API_TOKEN")
 app = Flask(__name__)
 CORS(app)
 
-# Define Model Classes
-class ToxicityModel:
-    def __init__(self, model_name):
-        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        self.model_name = model_name
-        self.tokenizer = AutoTokenizer.from_pretrained(model_name, use_auth_token=HF_API_TOKEN)
-        self.model = AutoModel.from_pretrained(model_name, use_auth_token=HF_API_TOKEN).to(self.device)
-        self.classifier = pipeline("text-classification", model=model_name, tokenizer=self.tokenizer, device=0 if torch.cuda.is_available() else -1)
+# Hugging Face Model API Endpoints
+MODEL_ENDPOINTS = {
+    "hi": "https://api-inference.huggingface.co/models/LingoIITGN/mBERT_toxic_hindi",
+    "te": "https://api-inference.huggingface.co/models/LingoIITGN/mBERT_toxic_telugu"
+}
 
-    def predict(self, text):
-        result = self.classifier(text)[0]  # Get first result
+# Function to send a request to Hugging Face API
+def get_toxicity_prediction(text, lang):
+    if lang not in MODEL_ENDPOINTS:
+        return None, f"Model for language '{lang}' not found"
+
+    url = MODEL_ENDPOINTS[lang]
+    headers = {"Authorization": f"Bearer {HF_API_TOKEN}"}
+    payload = {"inputs": text}
+
+    response = requests.post(url, headers=headers, json=payload)
+    
+    if response.status_code == 200:
+        result = response.json()[0]  # Extract first prediction result
         return {
             "toxicity": result["score"] * 100,  # Convert to percentage
             "is_toxic": result["label"].lower() == "toxic"
-        }
-
-# Load models from Hugging Face
-models = {
-    "hi": ToxicityModel("LingoIITGN/mBERT_toxic_hindi"),
-    "te": ToxicityModel("LingoIITGN/mBERT_toxic_telugul")
-}
+        }, None
+    else:
+        return None, f"Error from Hugging Face API: {response.text}"
 
 @app.route('/predict', methods=['POST'])
 def predict():
@@ -45,10 +47,9 @@ def predict():
     if not text:
         return jsonify({"error": "No text provided"}), 400
 
-    if lang not in models:
-        return jsonify({"error": f"Model for language '{lang}' not found"}), 400
-
-    result = models[lang].predict(text)
+    result, error = get_toxicity_prediction(text, lang)
+    if error:
+        return jsonify({"error": error}), 400
 
     # Send results to Google Sheet
     try:
