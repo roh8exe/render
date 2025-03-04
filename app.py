@@ -38,6 +38,10 @@ def get_toxicity_prediction(text, lang):
     else:
         return None, f"Error from Hugging Face API: {response.text}"
     
+@app.route('/debug-env', methods=['GET'])
+def debug_env():
+    return jsonify({"HF_API_TOKEN": os.environ.get("HF_API_TOKEN", "Not Found")})
+    
 @app.route('/')
 def home():
     return "ToxiGuard API is running!"
