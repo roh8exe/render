@@ -37,6 +37,10 @@ def get_toxicity_prediction(text, lang):
         }, None
     else:
         return None, f"Error from Hugging Face API: {response.text}"
+    
+@app.route('/')
+def home():
+    return "ToxiGuard API is running!"
 
 @app.route('/predict', methods=['POST'])
 def predict():
